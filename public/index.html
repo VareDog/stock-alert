@@ -212,7 +212,9 @@ async function refreshPrices(manual) {
   } catch (e) {}
 }
 
-setInterval(refreshPrices, 60000);
+setInterval(() => {
+  if (document.visibilityState === 'visible') refreshPrices();
+}, 10000);
 </script>
 </body>
 </html>
