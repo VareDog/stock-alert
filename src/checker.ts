@@ -3,7 +3,7 @@ import { notify } from "./notifier"
 
 const TENCENT_API = "https://qt.gtimg.cn/q="
 const LIMIT_PER_HOUR = 3600 * 1000
-const LIMIT_PER_DAY = 5
+const LIMIT_PER_DAY = 50
 
 // 北京时间偏移（UTC+8）
 const CN_TZ = 8 * 3600 * 1000
