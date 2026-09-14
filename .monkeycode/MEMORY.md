@@ -26,6 +26,11 @@ stock-alert（股票价格提醒）项目独立仓库的记忆文件。
   - D1 建表在 deploy 步骤自动执行：wrangler d1 execute stock-alert --remote --file=schema.sql
   - wrangler.jsonc 的 database_id 需用户建 D1 后填入
   - git remote 每次推送前注入 token、推送后清除
+  - CI 必须 Node 22+（wrangler 4.x 拒绝 Node 20）
+  - 已上线：VareDog/stock-alert 仓库，Worker=stock-alert，workers.dev 子域 doswowo.workers.dev，D1 id=a984695f-e97f-4ea7-afa2-eac64b34a4f7
+  - Worker secrets 通过 CF API PUT /accounts/{id}/workers/scripts/stock-alert/secrets 配置；GitHub Secrets 通过 pynacl sealed box 加密 PUT
+  - workers.dev 在 sandbox 和国内均无法直连，预览必须绑定自定义域名
+  - 用户 CF token（cfut_）缺 zone.create 权限，建 zone 需用户 Dashboard 手动操作
 
 [已知教训]
 - Date: 2026-09-14
