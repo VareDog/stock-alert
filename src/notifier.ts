@@ -118,12 +118,18 @@ export async function sendCfEmail(env: Env, subject: string, content: string): P
 
 // 微信通道：优先企业微信（秒达），未配置或失败时回落 WxPusher
 export async function sendWx(env: Env, content: string): Promise<{ ok: boolean; data: unknown }> {
+  let wecomErr: unknown = null
   if (env.WECOM_CORPID && env.WECOM_SECRET) {
-    const r = await sendWecom(env, content)
-    if (r.ok) return { ok: true, data: { via: "wecom", detail: r.data } }
+    try {
+      const r = await sendWecom(env, content)
+      if (r.ok) return { ok: true, data: { via: "wecom", detail: r.data } }
+      wecomErr = r.data
+    } catch (e) {
+      wecomErr = e instanceof Error ? e.message : String(e)
+    }
   }
   if (!env.WXPUSHER_TOKEN || !env.WXPUSHER_UID) {
-    return { ok: false, data: "企业微信和 WxPusher 均未配置或失败" }
+    return { ok: false, data: { wecomError: wecomErr ?? "未配置", fallback: "WxPusher 未配置" } }
   }
   const res = await fetch(WXPUSHER_API, {
     method: "POST",
@@ -136,7 +142,7 @@ export async function sendWx(env: Env, content: string): Promise<{ ok: boolean; 
     }),
   })
   const data = (await res.json().catch(() => null)) as { success?: boolean } | null
-  return { ok: !!data?.success, data }
+  return { ok: !!data?.success, data: { wecomError: wecomErr ?? null, wxpusher: data } }
 }
 
 export async function sendEmail(env: Env, subject: string, content: string): Promise<void> {
