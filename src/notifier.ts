@@ -7,9 +7,7 @@ export interface Env {
   ALERT_KEY: string
   WXPUSHER_TOKEN: string
   WXPUSHER_UID: string
-  WECOM_CORPID: string
-  WECOM_SECRET: string
-  WECOM_AGENTID: string
+  WECOM_WEBHOOK: string
   MAIL_TO: string
   MAIL_FROM: string
   RESEND_API_KEY: string
@@ -41,54 +39,19 @@ export interface Quote {
 
 const WXPUSHER_API = "https://wxpusher.zjiecode.com/api/send/message"
 const RESEND_API = "https://api.resend.com/emails"
-const WECOM_TOKEN_API = "https://qyapi.weixin.qq.com/cgi-bin/gettoken"
-const WECOM_SEND_API = "https://qyapi.weixin.qq.com/cgi-bin/message/send"
 
-// 企业微信 access_token 缓存（7200 秒有效）
-let wecomToken: { token: string; at: number } | null = null
-
-async function getWecomToken(env: Env): Promise<string | null> {
-  if (!env.WECOM_CORPID || !env.WECOM_SECRET) return null
-  if (wecomToken && Date.now() - wecomToken.at < 7000 * 1000) return wecomToken.token
-  const res = await fetch(
-    `${WECOM_TOKEN_API}?corpid=${env.WECOM_CORPID}&corpsecret=${env.WECOM_SECRET}`
-  )
-  const data = (await res.json().catch(() => null)) as { access_token?: string } | null
-  if (!data?.access_token) return null
-  wecomToken = { token: data.access_token, at: Date.now() }
-  return wecomToken.token
-}
-
-async function wecomPost(env: Env, token: string, content: string) {
-  return fetch(`${WECOM_SEND_API}?access_token=${token}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      touser: "@all",
-      msgtype: "text",
-      agentid: Number(env.WECOM_AGENTID),
-      text: { content },
-    }),
-  })
-}
-
-// 企业微信应用消息（个人微信扫码关注微信插件后秒达）
+// 企业微信群机器人 webhook（无 IP 白名单限制，消息经微信插件转到个人微信）
 export async function sendWecom(
   env: Env,
   content: string
 ): Promise<{ ok: boolean; data: unknown }> {
-  const token = await getWecomToken(env)
-  if (!token) return { ok: false, data: "未配置企业微信" }
-  let res = await wecomPost(env, token, content)
-  let data = (await res.json().catch(() => null)) as { errcode?: number; errmsg?: string } | null
-  // token 过期则刷新重试一次
-  if (data?.errcode === 40014 || data?.errcode === 42001) {
-    wecomToken = null
-    const t2 = await getWecomToken(env)
-    if (!t2) return { ok: false, data: "token 刷新失败" }
-    res = await wecomPost(env, t2, content)
-    data = (await res.json().catch(() => null)) as { errcode?: number } | null
-  }
+  if (!env.WECOM_WEBHOOK) return { ok: false, data: "未配置企业微信 webhook" }
+  const res = await fetch(env.WECOM_WEBHOOK, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ msgtype: "text", text: { content } }),
+  })
+  const data = (await res.json().catch(() => null)) as { errcode?: number; errmsg?: string } | null
   return { ok: data?.errcode === 0, data }
 }
 
@@ -116,10 +79,10 @@ export async function sendCfEmail(env: Env, subject: string, content: string): P
   await env.EMAIL.send(new EmailMessage(from, to, raw))
 }
 
-// 微信通道：优先企业微信（秒达），未配置或失败时回落 WxPusher
+// 微信通道：优先企业微信群机器人（秒达），未配置或失败时回落 WxPusher
 export async function sendWx(env: Env, content: string): Promise<{ ok: boolean; data: unknown }> {
   let wecomErr: unknown = null
-  if (env.WECOM_CORPID && env.WECOM_SECRET) {
+  if (env.WECOM_WEBHOOK) {
     try {
       const r = await sendWecom(env, content)
       if (r.ok) return { ok: true, data: { via: "wecom", detail: r.data } }
