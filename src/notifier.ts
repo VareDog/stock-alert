@@ -62,9 +62,9 @@ export async function sendCfEmail(env: Env, subject: string, content: string): P
   await env.EMAIL.send(new EmailMessage(from, to, raw))
 }
 
-export async function sendWx(env: Env, content: string): Promise<void> {
-  if (!env.WXPUSHER_TOKEN || !env.WXPUSHER_UID) return
-  await fetch(WXPUSHER_API, {
+export async function sendWx(env: Env, content: string): Promise<{ ok: boolean; data: unknown }> {
+  if (!env.WXPUSHER_TOKEN || !env.WXPUSHER_UID) return { ok: false, data: "未配置 token/uid" }
+  const res = await fetch(WXPUSHER_API, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -74,6 +74,8 @@ export async function sendWx(env: Env, content: string): Promise<void> {
       uids: [env.WXPUSHER_UID],
     }),
   })
+  const data = (await res.json().catch(() => null)) as { success?: boolean } | null
+  return { ok: !!data?.success, data }
 }
 
 export async function sendEmail(env: Env, subject: string, content: string): Promise<void> {
@@ -100,7 +102,8 @@ export async function notify(
   content: string
 ): Promise<void> {
   const tasks: Promise<void>[] = []
-  if (channel === "wx" || channel === "both") tasks.push(sendWx(env, content))
+  if (channel === "wx" || channel === "both")
+    tasks.push(sendWx(env, content).then(() => undefined))
   if (channel === "email" || channel === "both") tasks.push(sendMail(env, title, content))
   await Promise.allSettled(tasks)
 }

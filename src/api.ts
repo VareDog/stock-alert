@@ -1,4 +1,5 @@
 import type { Env, Quote } from "./notifier"
+import { sendCfEmail, sendEmail, sendWx } from "./notifier"
 import { fetchQuotes, hitBuy, hitSell } from "./checker"
 
 export async function handleApi(
@@ -6,13 +7,39 @@ export async function handleApi(
   env: Env,
   path: string
 ): Promise<Response> {
+  const url = new URL(req.url)
+  const db = env.DB
+  const method = req.method
+
+  // 通道测试：GET /api/test-wx?key=口令 / GET /api/test-mail?key=口令（浏览器可直接访问）
+  if (path === "/api/test-wx" && method === "GET") {
+    if (url.searchParams.get("key") !== env.ALERT_KEY) return json({ error: "口令错误" }, 401)
+    const r = await sendWx(env, `测试推送 Stock Alert\n时间：${new Date().toISOString()}`)
+    return json(r)
+  }
+  if (path === "/api/test-mail" && method === "GET") {
+    if (url.searchParams.get("key") !== env.ALERT_KEY) return json({ error: "口令错误" }, 401)
+    const subject = `测试邮件 Stock Alert ${new Date().toISOString()}`
+    const content = "这是一封测试邮件，收到说明 CF 邮件通道正常。"
+    try {
+      await sendCfEmail(env, subject, content)
+      return json({ ok: true, via: "cf-email" })
+    } catch (e) {
+      const err = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
+      try {
+        await sendEmail(env, subject, content)
+        return json({ ok: true, via: "resend", cfError: err })
+      } catch (e2) {
+        const err2 = e2 instanceof Error ? `${e2.name}: ${e2.message}` : String(e2)
+        return json({ ok: false, cfError: err, resendError: err2 })
+      }
+    }
+  }
+
   const key = req.headers.get("X-Alert-Key") ?? ""
   if (!env.ALERT_KEY || key !== env.ALERT_KEY) {
     return json({ error: "口令错误" }, 401)
   }
-
-  const db = env.DB
-  const method = req.method
 
   // 单支行情查询：POST /api/quote {"code":"sh600000"}
   if (path === "/api/quote" && method === "POST") {
