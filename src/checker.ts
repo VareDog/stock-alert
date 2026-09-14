@@ -2,7 +2,6 @@ import type { Env, Quote, Row } from "./notifier"
 import { notify } from "./notifier"
 
 const TENCENT_API = "https://qt.gtimg.cn/q="
-const LIMIT_PER_HOUR = 3600 * 1000
 const LIMIT_PER_DAY = 50
 
 // 北京时间偏移（UTC+8）
@@ -118,10 +117,8 @@ export async function runCheck(env: Env, now: number): Promise<void> {
 
     const sentToday = row.sent_date === today ? row.sent_today : 0
     const withinDayLimit = sentToday < LIMIT_PER_DAY
-    const firstTime = hit && row.triggered === 0
-    const steadyRepeat =
-      hit && row.triggered === 1 && now - row.last_sent_at >= LIMIT_PER_HOUR
-    const shouldSend = hit && withinDayLimit && (firstTime || steadyRepeat)
+    // 不限小时频率：条件满足且未超日上限即推送（Cron 每分钟一轮）
+    const shouldSend = hit && withinDayLimit
 
     if (shouldSend) {
       const parts: string[] = []
