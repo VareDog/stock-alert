@@ -179,7 +179,10 @@ async function loadRows() {
   render();
 }
 
+let refreshing = false;
 async function refreshPrices(manual) {
+  if (refreshing) return;
+  refreshing = true;
   try {
     const res = await fetch('/api/refresh', { headers: { 'X-Alert-Key': KEY } });
     if (!res.ok) return;
@@ -210,11 +213,21 @@ async function refreshPrices(manual) {
     gdot.style.background = anyHit ? '#ef4444' : '#374151';
     gdot.style.boxShadow = anyHit ? '0 0 8px #ef4444' : 'none';
   } catch (e) {}
+  refreshing = false;
+}
+
+// 北京时间交易时段（9:15-11:30 / 13:00-15:30，周一至周五）内才 1 秒刷新
+function inTrading() {
+  const d = new Date(Date.now() + 8 * 3600 * 1000);
+  const wd = d.getUTCDay();
+  if (wd === 0 || wd === 6) return false;
+  const hm = d.getUTCHours() * 100 + d.getUTCMinutes();
+  return (hm >= 915 && hm <= 1130) || (hm >= 1300 && hm <= 1530);
 }
 
 setInterval(() => {
-  if (document.visibilityState === 'visible') refreshPrices();
-}, 10000);
+  if (document.visibilityState === 'visible' && inTrading()) refreshPrices();
+}, 1000);
 </script>
 </body>
 </html>

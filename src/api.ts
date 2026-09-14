@@ -60,6 +60,11 @@ export async function handleApi(
 
   // 页面实时刷新：批量现价 + 实时判断命中
   if (path === "/api/refresh" && method === "GET") {
+    if (refreshCache && Date.now() - refreshCache.at < 3000) {
+      return new Response(refreshCache.data, {
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      })
+    }
     const { results } = await db.prepare("SELECT * FROM rows").all()
     const allRows = (results ?? []) as unknown as RowLike[]
     const codes = [...new Set(allRows.map((r) => r.code.toLowerCase()))]
@@ -71,6 +76,7 @@ export async function handleApi(
       const hit = hitBuy(r, q.price) || hitSell(r, q.price)
       out[r.code.toLowerCase()] = { name: q.name, price: q.price, change_pct: q.change_pct, hit }
     }
+    refreshCache = { data: JSON.stringify({ quotes: out }), at: Date.now() }
     return json({ quotes: out })
   }
 
@@ -160,6 +166,9 @@ interface RowLike {
   enabled_sell: number
   channel: string
 }
+
+// refresh 结果短缓存：1 秒轮询下把腾讯接口压力降到 3 秒一次
+let refreshCache: { data: string; at: number } | null = null
 
 function num(value: unknown, fallback: unknown): number {
   const n = typeof value === "number" ? value : parseFloat(String(value ?? ""))
