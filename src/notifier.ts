@@ -33,6 +33,7 @@ export interface Row {
 export interface Quote {
   name: string
   price: number
+  change_pct: number
 }
 
 const WXPUSHER_API = "https://wxpusher.zjiecode.com/api/send/message"

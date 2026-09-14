@@ -20,6 +20,9 @@
   .dot { width: 8px; height: 8px; border-radius: 50%; background: #374151; flex-shrink: 0; }
   .card.hit .dot { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
   .price { margin-left: auto; font-size: 17px; font-weight: 700; color: #fbbf24; }
+  .chg { font-size: 12px; font-weight: 600; color: #9ca3af; flex-shrink: 0; }
+  .chg.up { color: #ef4444; }
+  .chg.down { color: #22c55e; }
   .pair { display: flex; gap: 6px; margin-top: 6px; }
   .block { flex: 1; display: flex; align-items: center; gap: 5px; background: #22262e; padding: 4px 6px; border-radius: 6px; }
   .block.hitb { background: #3f1d1d; }
@@ -100,6 +103,7 @@ function render() {
         <input class="code" value="${esc(r.code)}" onchange="upd(${r.id},'code',this.value)">
         <span class="name">${esc(r.name)}</span>
         <span class="price">${r.current_price || '-'}</span>
+        <span class="chg" id="chg-${r.id}"></span>
       </div>
       <div class="pair">
         <div class="block ${r.triggered && r.enabled_buy ? 'hitb' : ''}">
@@ -190,6 +194,12 @@ async function refreshPrices(manual) {
       if (!card) return;
       if (q.name) card.querySelector('.name').textContent = q.name;
       card.querySelector('.price').textContent = q.price;
+      const chgEl = document.getElementById('chg-' + r.id);
+      if (chgEl && q.change_pct !== undefined) {
+        const v = q.change_pct;
+        chgEl.textContent = (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+        chgEl.className = 'chg' + (v > 0 ? ' up' : v < 0 ? ' down' : '');
+      }
       card.classList.toggle('hit', !!q.hit);
       const blocks = card.querySelectorAll('.block');
       blocks[0].classList.toggle('hitb', !!q.hit && r.enabled_buy === 1);

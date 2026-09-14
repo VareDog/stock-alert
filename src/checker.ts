@@ -26,6 +26,7 @@ function inWindow(hhmm: number): boolean {
 }
 
 // 腾讯行情接口返回 GBK 编码，格式：v_sh600000="1~浦发银行~600000~10.50~...~"
+// 字段索引：1=名称 3=现价 32=涨跌幅%
 export async function fetchQuotes(codes: string[]): Promise<Map<string, Quote>> {
   const result = new Map<string, Quote>()
   if (codes.length === 0) return result
@@ -39,11 +40,29 @@ export async function fetchQuotes(codes: string[]): Promise<Map<string, Quote>> 
   while ((m = re.exec(text)) !== null) {
     const parts = m[2].split("~")
     const price = parseFloat(parts[3])
+    const changePct = parseFloat(parts[32])
     if (!Number.isNaN(price) && price > 0) {
-      result.set(m[1].toLowerCase(), { name: parts[1], price })
+      result.set(m[1].toLowerCase(), {
+        name: parts[1],
+        price,
+        change_pct: Number.isNaN(changePct) ? 0 : changePct,
+      })
     }
   }
   return result
+}
+
+// 代码规范化：支持纯数字自动补前缀（6→sh、0/3→sz、4/8→bj）
+export function normalizeCode(raw: string): string | null {
+  const code = raw.trim().toLowerCase()
+  if (/^(sh|sz|bj)\d{6}$/.test(code)) return code
+  if (/^\d{6}$/.test(code)) {
+    const head = code[0]
+    if (head === "6") return "sh" + code
+    if (head === "0" || head === "3") return "sz" + code
+    if (head === "4" || head === "8") return "bj" + code
+  }
+  return null
 }
 
 export type HitRow = Pick<

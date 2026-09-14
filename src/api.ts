@@ -1,6 +1,6 @@
 import type { Env, Quote } from "./notifier"
 import { sendCfEmail, sendEmail, sendWx } from "./notifier"
-import { fetchQuotes, hitBuy, hitSell } from "./checker"
+import { fetchQuotes, hitBuy, hitSell, normalizeCode } from "./checker"
 
 export async function handleApi(
   req: Request,
@@ -64,12 +64,12 @@ export async function handleApi(
     const allRows = (results ?? []) as unknown as RowLike[]
     const codes = [...new Set(allRows.map((r) => r.code.toLowerCase()))]
     const quotes = await fetchQuotes(codes)
-    const out: Record<string, { name: string; price: number; hit: boolean }> = {}
+    const out: Record<string, { name: string; price: number; change_pct: number; hit: boolean }> = {}
     for (const r of allRows) {
       const q = quotes.get(r.code.toLowerCase())
       if (!q) continue
       const hit = hitBuy(r, q.price) || hitSell(r, q.price)
-      out[r.code.toLowerCase()] = { name: q.name, price: q.price, hit }
+      out[r.code.toLowerCase()] = { name: q.name, price: q.price, change_pct: q.change_pct, hit }
     }
     return json({ quotes: out })
   }
@@ -77,8 +77,8 @@ export async function handleApi(
   // 新增行
   if (path === "/api/rows" && method === "POST") {
     const body = (await req.json()) as { code?: string }
-    const code = (body.code ?? "").trim().toLowerCase()
-    if (!/^s[hzb]\d{6}$/.test(code)) return json({ error: "代码格式：sh600000 / sz000001 / bj430047" }, 400)
+    const code = normalizeCode(body.code ?? "")
+    if (!code) return json({ error: "代码格式：600519 / 000001 / 300750 / sh600000" }, 400)
     const quotes = await fetchQuotes([code])
     const q: Quote | undefined = quotes.get(code)
     const result = await db
@@ -104,10 +104,12 @@ export async function handleApi(
     if (!existing) return json({ error: "行不存在" }, 404)
 
     let name = existing.name
-    const codeChanged = typeof body.code === "string" && body.code.trim().toLowerCase() !== existing.code
-    const code = codeChanged ? (body.code as string).trim().toLowerCase() : (existing.code as string)
+    const codeChanged = typeof body.code === "string" && normalizeCode(body.code) !== existing.code
+    const code = codeChanged
+      ? (normalizeCode(body.code as string) ?? "")
+      : (existing.code as string)
     if (codeChanged) {
-      if (!/^s[hzb]\d{6}$/.test(code)) return json({ error: "代码格式：sh600000 / sz000001 / bj430047" }, 400)
+      if (!code) return json({ error: "代码格式：600519 / 000001 / 300750 / sh600000" }, 400)
       const quotes = await fetchQuotes([code])
       name = quotes.get(code)?.name ?? ""
     }
