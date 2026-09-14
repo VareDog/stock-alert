@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>股票价格提醒</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #111318; color: #e5e7eb; font-family: system-ui, sans-serif; padding: 16px; }
+  h1 { font-size: 20px; padding: 8px 0; }
+  .hint { color: #9ca3af; font-size: 13px; margin-bottom: 12px; }
+  #lock { max-width: 360px; margin: 120px auto; text-align: center; }
+  #lock input { width: 100%; padding: 10px; font-size: 15px; background: #1c1f26; border: 1px solid #374151; color: #fff; border-radius: 8px; text-align: center; }
+  #lock button { margin-top: 12px; width: 100%; padding: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 8px 6px; border-bottom: 1px solid #2a2e38; text-align: center; white-space: nowrap; }
+  th { color: #9ca3af; font-weight: 500; }
+  tr.hit td { background: #7f1d1d; }
+  tr.hit td:first-child { border-radius: 6px 0 0 6px; }
+  tr.hit td:last-child { border-radius: 0 6px 6px 0; }
+  input.cell { width: 90px; padding: 5px 6px; background: #1c1f26; border: 1px solid #374151; color: #fff; border-radius: 6px; text-align: center; }
+  input.code { width: 100px; }
+  input.wide { width: 70px; }
+  select.cell { padding: 5px; background: #1c1f26; border: 1px solid #374151; color: #fff; border-radius: 6px; }
+  .price { font-weight: bold; color: #fbbf24; }
+  .del { color: #ef4444; cursor: pointer; padding: 4px 8px; }
+  button { background: #d97706; border: none; color: #fff; padding: 8px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  button.ghost { background: #374151; }
+  .toolbar { display: flex; gap: 10px; margin: 10px 0; }
+  .err { color: #ef4444; font-size: 13px; margin-top: 8px; min-height: 18px; }
+  @media (max-width: 720px) { table { font-size: 12px; } input.cell { width: 64px; } }
+</style>
+</head>
+<body>
+
+<div id="lock">
+  <h1>股票价格提醒</h1>
+  <p class="hint" style="margin-top:12px">输入访问口令</p>
+  <input id="keyInput" type="password" placeholder="口令">
+  <button onclick="unlock()">进入</button>
+  <div class="err" id="lockErr"></div>
+</div>
+
+<div id="app" style="display:none">
+  <h1>股票价格提醒</h1>
+  <p class="hint">红色行 = 当前满足提醒条件；检查时段：9:15-11:30、13:00-15:30（北京时间）；代码格式：sh600000 / sz000001 / bj430047</p>
+  <div class="toolbar">
+    <button onclick="addRow()">+ 添加一行</button>
+    <button class="ghost" onclick="loadRows()">刷新价格</button>
+  </div>
+  <div style="overflow-x:auto">
+  <table>
+    <thead>
+      <tr>
+        <th>代码</th><th>名称</th><th>现价</th><th>意向买价</th><th>买提醒</th>
+        <th>意向卖价</th><th>卖提醒</th><th>幅度%</th><th>通道</th><th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  </div>
+  <div class="err" id="err"></div>
+</div>
+
+<script>
+let KEY = localStorage.getItem('alert_key') || '';
+let rows = [];
+
+if (KEY) { tryLoad(); }
+
+function unlock() {
+  KEY = document.getElementById('keyInput').value.trim();
+  tryLoad();
+}
+
+function showLockErr(msg) {
+  document.getElementById('lockErr').textContent = msg;
+}
+
+async function tryLoad() {
+  try {
+    const res = await fetch('/api/rows', { headers: { 'X-Alert-Key': KEY } });
+    if (res.status === 401) { showLockErr('口令错误'); return; }
+    localStorage.setItem('alert_key', KEY);
+    document.getElementById('lock').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    const data = await res.json();
+    rows = data.rows || [];
+    render();
+  } catch (e) {
+    showLockErr('网络错误，稍后重试');
+  }
+}
+
+function render() {
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    if (r.triggered) tr.className = 'hit';
+    tr.innerHTML = `
+      <td><input class="cell code" value="${esc(r.code)}" onchange="upd(${r.id},'code',this.value)"></td>
+      <td>${esc(r.name)}</td>
+      <td class="price">${r.current_price || '-'}</td>
+      <td><input class="cell" type="number" step="0.01" value="${r.buy_price || ''}" onchange="upd(${r.id},'buy_price',this.value)"></td>
+      <td><input type="checkbox" ${r.enabled_buy ? 'checked' : ''} onchange="upd(${r.id},'enabled_buy',this.checked)"></td>
+      <td><input class="cell" type="number" step="0.01" value="${r.sell_price || ''}" onchange="upd(${r.id},'sell_price',this.value)"></td>
+      <td><input type="checkbox" ${r.enabled_sell ? 'checked' : ''} onchange="upd(${r.id},'enabled_sell',this.checked)"></td>
+      <td><input class="cell wide" type="number" step="1" value="${Math.round((r.band || 0.1) * 100)}" onchange="upd(${r.id},'band',this.value)"></td>
+      <td><select class="cell" onchange="upd(${r.id},'channel',this.value)">
+        <option value="wx" ${r.channel==='wx'?'selected':''}>微信</option>
+        <option value="email" ${r.channel==='email'?'selected':''}>邮件</option>
+        <option value="both" ${r.channel==='both'?'selected':''}>双通道</option>
+      </select></td>
+      <td><span class="del" onclick="delRow(${r.id})">删除</span></td>`;
+    tbody.appendChild(tr);
+  }
+  refreshPrices();
+}
+
+function esc(s) { return String(s ?? '').replace(/"/g, '&quot;'); }
+
+async function upd(id, field, value) {
+  const body = {};
+  if (field === 'band') body.band = Math.min(50, Math.max(1, parseFloat(value) || 10)) / 100;
+  else if (field === 'buy_price' || field === 'sell_price') body[field] = parseFloat(value) || 0;
+  else if (field === 'enabled_buy' || field === 'enabled_sell') body[field] = value ? 1 : 0;
+  else body[field] = String(value).trim();
+  const res = await fetch('/api/rows/' + id, {
+    method: 'PUT',
+    headers: { 'X-Alert-Key': KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (data.error) { document.getElementById('err').textContent = data.error; return; }
+  const i = rows.findIndex(r => r.id === id);
+  if (i >= 0) rows[i] = data.row;
+  render();
+}
+
+async function addRow() {
+  const code = prompt('输入股票代码（如 sh600000）：');
+  if (!code) return;
+  const res = await fetch('/api/rows', {
+    method: 'POST',
+    headers: { 'X-Alert-Key': KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: code.trim() })
+  });
+  const data = await res.json();
+  if (data.error) { document.getElementById('err').textContent = data.error; return; }
+  rows.push(data.row);
+  render();
+}
+
+async function delRow(id) {
+  if (!confirm('删除这一行？')) return;
+  await fetch('/api/rows/' + id, { method: 'DELETE', headers: { 'X-Alert-Key': KEY } });
+  rows = rows.filter(r => r.id !== id);
+  render();
+}
+
+async function loadRows() {
+  const res = await fetch('/api/rows', { headers: { 'X-Alert-Key': KEY } });
+  const data = await res.json();
+  rows = data.rows || [];
+  render();
+}
+
+async function refreshPrices() {
+  try {
+    const res = await fetch('/api/refresh', { headers: { 'X-Alert-Key': KEY } });
+    if (!res.ok) return;
+    const data = await res.json();
+    const tbody = document.getElementById('tbody');
+    rows.forEach((r, idx) => {
+      const q = data.quotes[r.code.toLowerCase()];
+      if (!q) return;
+      r.current_price = q.price;
+      const tr = tbody.querySelector(`tr:nth-child(${idx + 1})`);
+      if (!tr) return;
+      const nameCell = tr.querySelector('td:nth-child(2)');
+      if (q.name) nameCell.textContent = q.name;
+      tr.querySelector('.price').textContent = q.price;
+      tr.classList.toggle('hit', !!q.hit);
+    });
+  } catch (e) {}
+}
+</script>
+</body>
+</html>

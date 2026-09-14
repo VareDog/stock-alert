@@ -1,0 +1,13 @@
+{
+  "name": "stock-alert",
+  "private": true,
+  "scripts": {
+    "check": "tsc --noEmit",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.0.0",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.0.0"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stock-alert",
+  "main": "src/worker.ts",
+  "compatibility_date": "2025-01-01",
+  "assets": {
+    "directory": "./public"
+  },
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "stock-alert",
+      "database_id": "创建D1后把database_id填到这里"
+    }
+  ]
+}
