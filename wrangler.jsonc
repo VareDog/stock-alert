@@ -6,6 +6,7 @@
   "assets": {
     "directory": "./public"
   },
+  "workers_dev": true,
   "triggers": {
     "crons": ["* * * * *"]
   },

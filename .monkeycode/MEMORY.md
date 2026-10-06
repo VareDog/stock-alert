@@ -26,7 +26,9 @@ stock-alert（股票价格提醒）项目独立仓库的记忆文件。
   - D1 建表在 deploy 步骤自动执行：wrangler d1 execute stock-alert --remote --file=schema.sql
   - git remote 每次推送前注入 token、推送后清除
   - CI 必须 Node 22+（wrangler 4.x 拒绝 Node 20）
-  - 已上线：VareDog/stock-alert 仓库，Worker=stock-alert，域名 https://snn.de5.net，D1 id=a984695f-e97f-4ea7-afa2-eac64b34a4f7
+  - 已上线：VareDog/stock-alert 仓库，Worker=stock-alert，域名 https://snn.de5.net 与 https://red.988199.xyz，D1 id=a984695f-e97f-4ea7-afa2-eac64b34a4f7
+  - 2026-10-06：访问口令可在页面「修改访问口令」改，写入 D1 state.alert_key，未改过时回落 Worker secret ALERT_KEY；改密后前端会更新 localStorage
+  - red.988199.xyz 用 `wrangler deploy --keep-vars --domain red.988199.xyz` 绑定（Workers custom domain 会自动写 988199.xyz zone 的 DNS）；当前部署 token 不能改 Zone DNS / 不能写 snn.de5.net 的 Worker Route，wrangler.jsonc 不要写 routes，以免下次部署冲掉 snn.de5.net
   - Worker secrets 通过 CF API PUT /accounts/{id}/workers/scripts/stock-alert/secrets 配置；GitHub Secrets 通过 pynacl sealed box 加密 PUT
   - sandbox 环境无法直连 workers.dev 和非白名单站点（443 SNI 过滤），DNS 验证用 cloudflare-dns.com DoH JSON API，UDP 53 出站被禁
   - 用户 CF token（cfut_）限制：无 zone.create、无 Custom Domains API（405 authentication scheme）、无 Email Routing enable；域名绑定用"橙云 A 记录 + Worker Route"方案代替 Custom Domains

@@ -11,14 +11,16 @@ export async function handleApi(
   const db = env.DB
   const method = req.method
 
+  const alertKey = await getAlertKey(env)
+
   // 通道测试：GET /api/test-wx?key=口令 / GET /api/test-mail?key=口令（浏览器可直接访问）
   if (path === "/api/test-wx" && method === "GET") {
-    if (url.searchParams.get("key") !== env.ALERT_KEY) return json({ error: "口令错误" }, 401)
+    if (url.searchParams.get("key") !== alertKey) return json({ error: "口令错误" }, 401)
     const r = await sendWx(env, `测试推送 Stock Alert\n时间：${new Date().toISOString()}`)
     return json(r)
   }
   if (path === "/api/test-mail" && method === "GET") {
-    if (url.searchParams.get("key") !== env.ALERT_KEY) return json({ error: "口令错误" }, 401)
+    if (url.searchParams.get("key") !== alertKey) return json({ error: "口令错误" }, 401)
     const subject = `测试邮件 Stock Alert ${new Date().toISOString()}`
     const content = "这是一封测试邮件，收到说明 CF 邮件通道正常。"
     try {
@@ -37,8 +39,20 @@ export async function handleApi(
   }
 
   const key = req.headers.get("X-Alert-Key") ?? ""
-  if (!env.ALERT_KEY || key !== env.ALERT_KEY) {
+  if (!alertKey || key !== alertKey) {
     return json({ error: "口令错误" }, 401)
+  }
+
+  if (path === "/api/password" && method === "POST") {
+    const body = (await req.json().catch(() => ({}))) as { oldPassword?: string; newPassword?: string }
+    const oldPassword = String(body.oldPassword || "")
+    const newPassword = String(body.newPassword || "")
+    if (!oldPassword || !newPassword) return json({ error: "请填写原口令和新口令" }, 400)
+    if (newPassword.length < 6) return json({ error: "新口令至少 6 位" }, 400)
+    if (oldPassword === newPassword) return json({ error: "新口令不能与原口令相同" }, 400)
+    if (oldPassword !== alertKey) return json({ error: "原口令错误" }, 400)
+    await setAlertKey(env, newPassword)
+    return json({ ok: true })
   }
 
   // 单支行情查询：POST /api/quote {"code":"sh600000"}
@@ -154,6 +168,20 @@ export async function handleApi(
   }
 
   return json({ error: "not found" }, 404)
+}
+
+async function getAlertKey(env: Env): Promise<string> {
+  try {
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT DEFAULT '')").run()
+    const row = await env.DB.prepare("SELECT value FROM state WHERE key = 'alert_key'").first<{ value: string }>()
+    if (row && row.value) return String(row.value)
+  } catch (e) {}
+  return env.ALERT_KEY
+}
+
+async function setAlertKey(env: Env, password: string): Promise<void> {
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT DEFAULT '')").run()
+  await env.DB.prepare("INSERT INTO state (key, value) VALUES ('alert_key', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(password).run()
 }
 
 interface RowLike {

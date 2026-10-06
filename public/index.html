@@ -37,6 +37,10 @@
   button.ghost { background: #374151; }
   .toolbar { display: flex; gap: 8px; margin: 8px 0; }
   .err { color: #ef4444; font-size: 12px; margin-top: 6px; min-height: 16px; }
+  .ok { color: #22c55e; font-size: 12px; margin-top: 6px; min-height: 16px; }
+  .pwd-box { margin-top: 16px; padding-top: 12px; border-top: 1px solid #2a2e38; }
+  .pwd-box h2 { font-size: 15px; margin-bottom: 8px; }
+  .pwd-box input { width: 100%; margin-bottom: 8px; padding: 8px; background: #1c1f26; border: 1px solid #374151; color: #fff; border-radius: 6px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -58,6 +62,14 @@
   </div>
   <div id="cards"></div>
   <div class="err" id="err"></div>
+  <div class="pwd-box">
+    <h2>修改访问口令</h2>
+    <input id="pwd-old" type="password" placeholder="原口令" autocomplete="current-password">
+    <input id="pwd-new" type="password" placeholder="新口令（至少 6 位）" autocomplete="new-password">
+    <input id="pwd-new2" type="password" placeholder="再输入一次新口令" autocomplete="new-password">
+    <button onclick="changePassword()">保存新口令</button>
+    <div class="err" id="pwd-msg"></div>
+  </div>
 </div>
 
 <script>
@@ -228,6 +240,35 @@ function inTrading() {
 setInterval(() => {
   if (document.visibilityState === 'visible' && inTrading()) refreshPrices();
 }, 1000);
+
+async function changePassword() {
+  const msg = document.getElementById('pwd-msg');
+  msg.className = 'err';
+  msg.textContent = '';
+  const oldPassword = document.getElementById('pwd-old').value;
+  const newPassword = document.getElementById('pwd-new').value;
+  const newPassword2 = document.getElementById('pwd-new2').value;
+  if (!oldPassword || !newPassword) { msg.textContent = '请填写原口令和新口令'; return; }
+  if (newPassword.length < 6) { msg.textContent = '新口令至少 6 位'; return; }
+  if (newPassword !== newPassword2) { msg.textContent = '两次输入的新口令不一致'; return; }
+  const res = await fetch('/api/password', {
+    method: 'POST',
+    headers: { 'X-Alert-Key': KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ oldPassword, newPassword })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    KEY = newPassword;
+    localStorage.setItem('alert_key', KEY);
+    msg.className = 'ok';
+    msg.textContent = '口令已更新，下次请用新口令进入';
+    document.getElementById('pwd-old').value = '';
+    document.getElementById('pwd-new').value = '';
+    document.getElementById('pwd-new2').value = '';
+  } else {
+    msg.textContent = data.error || '修改失败';
+  }
+}
 </script>
 </body>
 </html>
