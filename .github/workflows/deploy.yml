@@ -31,4 +31,4 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_ACCOUNT }}
         run: |
           npx wrangler d1 execute stock-alert --remote --file=schema.sql -y || true
-          npx wrangler deploy
+          npx wrangler deploy --keep-vars --domain red.988199.xyz
